@@ -13,7 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+  <script crossorigin src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -326,7 +326,7 @@
     };
 
     // --- Firebase Auth Modal Component (Arkerderacker Theme) ---
-    const AuthModalComponent = ({ isOpen, onClose, onLoginSuccess }) => {
+    const AuthModalComponent = ({ isOpen, onClose, onLoginSuccess, authError }) => {
       if (!isOpen) return null;
 
       return (
@@ -361,6 +361,12 @@
               <div className="w-5 h-5 rounded-md bg-white text-black font-extrabold flex items-center justify-center text-xs">G</div>
               <span>Sign in with Google</span>
             </button>
+
+            {authError && (
+              <div className="mt-4 p-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-xs text-center w-full">
+                {authError}
+              </div>
+            )}
 
             <div className="mt-5 text-[11px] text-white/45 text-center">
               Sign in to continue to Arkerderacker
@@ -702,6 +708,7 @@
       const [isMenuOpen, setIsMenuOpen] = useState(false);
       const [isAiOpen, setIsAiOpen] = useState(false);
       const [isAuthOpen, setIsAuthOpen] = useState(false);
+      const [authError, setAuthError] = useState("");
       const [activeTheme, setActiveTheme] = useState(themeOptions.red);
 
       useEffect(() => {
@@ -711,11 +718,12 @@
         root.style.setProperty('--theme-600', activeTheme.rgb600);
       }, [activeTheme]);
 
-      // Firebase Authentication Logic Handler
+      // Firebase Authentication Logic Handler with Redirection Fallback & Success Notification
       const handleGoogleSignIn = async () => {
+        setAuthError("");
         try {
           const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
-          const { getAuth, GoogleAuthProvider, signInWithPopup } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js");
+          const { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js");
 
           const firebaseConfig = {
             apiKey: "AIzaSyDID-Szx_uEzvBaBQN_ES2NjOcDP_bg2UM",
@@ -731,13 +739,22 @@
           const auth = getAuth(app);
           const provider = new GoogleAuthProvider();
 
-          const result = await signInWithPopup(auth, provider);
-          console.log("User:", result.user.displayName, result.user.email);
-          setIsAuthOpen(false);
-          alert(`Welcome back, ${result.user.displayName || 'User'}!`);
+          try {
+            const result = await signInWithPopup(auth, provider);
+            const userName = result.user.displayName || result.user.email || 'User';
+            setIsAuthOpen(false);
+            alert(`welcome user ${userName}`);
+          } catch (popupErr) {
+            // Fallback to redirect if popup is blocked or fails to avoid freezing/crashing context
+            if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/popup-closed-by-user') {
+              await signInWithRedirect(auth, provider);
+            } else {
+              throw popupErr;
+            }
+          }
         } catch (err) {
           console.error(err);
-          alert(err.message);
+          setAuthError(err.message);
         }
       };
 
@@ -745,7 +762,7 @@
         <main className="relative bg-black min-h-screen w-full flex flex-col overflow-x-hidden selection:bg-theme-600 selection:text-white">
           <MobileMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
           <AiChatModal isOpen={isAiOpen} onClose={() => setIsAiOpen(false)} />
-          <AuthModalComponent isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLoginSuccess={handleGoogleSignIn} />
+          <AuthModalComponent isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLoginSuccess={handleGoogleSignIn} authError={authError} />
           <BackgroundVideo />
           
           <Navbar onOpenMenu={() => setIsMenuOpen(true)} activeTheme={activeTheme} setActiveTheme={setActiveTheme} onOpenAuth={() => setIsAuthOpen(true)} />
