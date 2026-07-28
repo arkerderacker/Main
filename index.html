@@ -474,14 +474,15 @@
             <div className="flex items-center gap-3">
               {userName ? (
                 <div className="flex items-center gap-3">
-                  <span className="text-white text-sm font-semibold px-3 py-1 liquid-glass rounded-full border border-theme-500-30">
+                  <span className="text-white text-sm font-semibold px-4 py-1.5 liquid-glass rounded-full border border-theme-500-40 theme-transition shadow-theme-glow-sm">
                     {userName}
                   </span>
                   <button 
                     onClick={onLogout}
-                    className="text-white/60 hover:text-white text-xs transition-colors cursor-pointer"
+                    title="Sign out"
+                    className="text-white/50 hover:text-white text-xs transition-colors cursor-pointer px-1"
                   >
-                    Sign out
+                    Logout
                   </button>
                 </div>
               ) : (
@@ -740,7 +741,7 @@
       const [isAuthOpen, setIsAuthOpen] = useState(false);
       const [authError, setAuthError] = useState("");
       const [activeTheme, setActiveTheme] = useState(themeOptions.red);
-      const [userName, setUserName] = useState(localStorage.getItem('arker_user') || "");
+      const [userName, setUserName] = useState(() => localStorage.getItem('arker_user') || "");
 
       useEffect(() => {
         const root = document.documentElement;
@@ -749,12 +750,12 @@
         root.style.setProperty('--theme-600', activeTheme.rgb600);
       }, [activeTheme]);
 
-      // Firebase Popup Auth with fallback/redirect options to handle single-device iframe limitations safely
+      // Robust Firebase Auth initialization with persistent state handling
       const handleGoogleSignIn = async () => {
         setAuthError("");
         try {
-          const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
-          const { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js");
+          const { initializeApp, getApps } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
+          const { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js");
 
           const firebaseConfig = {
             apiKey: "AIzaSyDID-Szx_uEzvBaBQN_ES2NjOcDP_bg2UM",
@@ -766,7 +767,7 @@
             measurementId: "G-GNNZDMYXX5"
           };
 
-          const app = initializeApp(firebaseConfig);
+          const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
           const auth = getAuth(app);
           const provider = new GoogleAuthProvider();
 
@@ -775,33 +776,65 @@
             const result = await signInWithPopup(auth, provider);
             user = result.user;
           } catch (popupErr) {
-            // Fallback to redirect if popup is blocked or cross-origin restrictions apply
+            // Fallback to redirect if popup is blocked
             await signInWithRedirect(auth, provider);
             return;
           }
 
-          const name = user.displayName || user.email.split('@')[0] || 'User';
-          setUserName(name);
-          localStorage.setItem('arker_user', name);
+          if (user) {
+            const name = user.displayName || user.email.split('@')[0] || 'User';
+            setUserName(name);
+            localStorage.setItem('arker_user', name);
+            setIsAuthOpen(false);
 
-          setIsAuthOpen(false);
-
-          const welcome = document.getElementById("welcomeScreen");
-          const logo = document.getElementById("welcomeLogo");
-          if (welcome && logo) {
-            welcome.style.display = "flex";
-            logo.classList.remove("play");
-            void logo.offsetWidth;
-            logo.classList.add("play");
+            const welcome = document.getElementById("welcomeScreen");
+            const logo = document.getElementById("welcomeLogo");
+            if (welcome && logo) {
+              welcome.style.display = "flex";
+              logo.classList.remove("play");
+              void logo.offsetWidth;
+              logo.classList.add("play");
+            }
           }
-
-          alert(`welcome user ${name}`);
 
         } catch (err) {
           console.error(err);
           setAuthError(err.message);
         }
       };
+
+      // Check for redirect result on component load
+      useEffect(() => {
+        const checkRedirect = async () => {
+          try {
+            const { initializeApp, getApps } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
+            const { getAuth, getRedirectResult } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js");
+
+            const firebaseConfig = {
+              apiKey: "AIzaSyDID-Szx_uEzvBaBQN_ES2NjOcDP_bg2UM",
+              authDomain: "a-unblocked.firebaseapp.com",
+              projectId: "a-unblocked",
+              storageBucket: "a-unblocked.firebasestorage.app",
+              messagingSenderId: "261134291708",
+              appId: "1:261134291708:web:9df287b7fcd0caf522bd79",
+              measurementId: "G-GNNZDMYXX5"
+            };
+
+            const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+            const auth = getAuth(app);
+            
+            const result = await getRedirectResult(auth);
+            if (result && result.user) {
+              const name = result.user.displayName || result.user.email.split('@')[0] || 'User';
+              setUserName(name);
+              localStorage.setItem('arker_user', name);
+            }
+          } catch (e) {
+            console.error("Redirect check error:", e);
+          }
+        };
+        checkRedirect();
+      }, []);
 
       const handleLogout = () => {
         setUserName("");
